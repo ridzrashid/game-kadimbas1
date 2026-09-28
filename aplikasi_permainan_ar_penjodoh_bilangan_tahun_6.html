@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kuiz AR Penjodoh Bilangan - Tema Hang Jebat</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- MediaPipe Hands & Camera Utils CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Plus+Jakarta+Sans:wght@600;700;800&family=Fredoka+One&display=display=swap');
+    
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: radial-gradient(circle at center, #2a080c 0%, #0c0a09 100%);
+    }
+
+    .font-jebat {
+      font-family: 'Cinzel Decorative', serif;
+    }
+
+    .font-game {
+      font-family: 'Fredoka One', cursive;
+    }
+
+    /* Pattern Motif Songket Background */
+    .bg-songket-pattern {
+      background-image: radial-gradient(#d97706 0.75px, transparent 0.75px), radial-gradient(#d97706 0.75px, #0c0a09 0.75px);
+      background-size: 30px 30px;
+      background-position: 0 0, 15px 15px;
+      background-opacity: 0.05;
+    }
+
+    /* Video disembunyikan kerana direndang terus dalam Canvas */
+    #input-video {
+      display: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen text-white flex flex-col items-center justify-center p-4 bg-songket-pattern">
+
+  <!-- Header Utama Tema Jebat -->
+  <header class="text-center mb-4 relative z-10">
+    <div class="inline-flex items-center space-x-2 bg-amber-500/10 border border-amber-500/30 px-4 py-1 rounded-full mb-2">
+      <span class="text-amber-400 text-xs font-bold tracking-widest uppercase">⚔️ CABARAN PENDEKAR AR</span>
+    </div>
+    <h1 class="font-jebat text-2xl md:text-4xl text-amber-400 drop-shadow-[0_4px_10px_rgba(217,119,6,0.4)] tracking-wide">
+      MEDAN JEBAT: PENJODOH BILANGAN
+    </h1>
+    <p class="text-amber-100/80 text-xs md:text-sm mt-1 max-w-xl">
+      Hulurkan jari telunjuk pendekar anda ke arah jawapan sakti untuk menewaskan cabaran ini!
+    </p>
+  </header>
+
+  <!-- Kad Kawalan & Paparan Utama -->
+  <div class="relative w-full max-w-[680px] bg-stone-900/90 rounded-2xl p-4 border-2 border-amber-600/60 shadow-[0_0_35px_rgba(180,83,9,0.25)] backdrop-blur-md">
+    
+    <!-- Papan Skor dan Status -->
+    <div class="flex justify-between items-center mb-3 px-2">
+      <div class="flex items-center space-x-2">
+        <span class="bg-rose-950/80 text-amber-300 font-bold px-3 py-1.5 rounded-lg border border-amber-500/40 text-xs md:text-sm flex items-center gap-1">
+          <span>📜 Soalan:</span> <span id="q-num" class="text-white">1</span>/<span id="q-total" class="text-white">10</span>
+        </span>
+      </div>
+      <div class="bg-amber-950/80 text-amber-400 font-bold px-4 py-1.5 rounded-lg border border-amber-500/50 text-sm md:text-base flex items-center gap-2 shadow-inner">
+        <span>🗡️ Mata Hulubalang:</span> <span id="score" class="text-2xl text-amber-300 font-jebat">0</span>
+      </div>
+    </div>
+
+    <!-- Container Skrin Canvas AR -->
+    <div class="relative w-full aspect-[4/3] bg-stone-950 rounded-xl overflow-hidden border-2 border-amber-700/50 shadow-2xl">
+      
+      <!-- Hidden Input Video -->
+      <video id="input-video" playsinline></video>
+      
+      <!-- Canvas Render AR -->
+      <canvas id="output-canvas" width="640" height="480" class="w-full h-full object-cover"></canvas>
+
+      <!-- Overlay Mula Permainan -->
+      <div id="start-overlay" class="absolute inset-0 bg-stone-950/95 flex flex-col items-center justify-center p-6 text-center z-20 border-4 border-amber-600/30">
+        <div class="w-20 h-20 bg-amber-500/10 text-amber-400 rounded-full flex items-center justify-center mb-4 border-2 border-amber-500/50 shadow-[0_0_20px_rgba(217,119,6,0.3)] animate-pulse">
+          <span class="text-4xl">🗡️</span>
+        </div>
+        <h2 class="font-jebat text-2xl md:text-3xl text-amber-400 mb-2">Bersedia Pendekar?</h2>
+        <p class="text-stone-300 text-xs md:text-sm max-w-md mb-4 leading-relaxed">
+          Kamera akan menjejak isyarat jari anda. Halakan jari telunjuk ke kotak jawapan dan <span class="text-amber-400 font-bold">tahan selama 1 saat</span> untuk mengunci pilihan anda.
+        </p>
+        <!-- Status Kamera / Fallback Notice -->
+        <div id="camera-status" class="text-xs text-amber-300/80 mb-4 bg-amber-950/60 px-3 py-1.5 rounded-lg border border-amber-500/30 hidden">
+          ℹ️ Mod Sentuhan/Tetikus sedia digunakan sekiranya kamera tidak diaktifkan.
+        </div>
+        <button id="btn-start" class="font-jebat bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-400 text-stone-950 font-black px-8 py-3.5 rounded-xl text-lg shadow-[0_5px_20px_rgba(217,119,6,0.4)] hover:scale-105 transition duration-200 border border-amber-300 cursor-pointer">
+          Mula Pertarungan ⚔️
+        </button>
+      </div>
+
+      <!-- Overlay Tamat Permainan -->
+      <div id="end-overlay" class="hidden absolute inset-0 bg-stone-950/95 flex flex-col items-center justify-center p-6 text-center z-20 border-4 border-amber-600/40">
+        <div class="text-5xl mb-2">🏆</div>
+        <h2 class="font-jebat text-2xl md:text-3xl text-amber-400 mb-1">Pertarungan Tamat!</h2>
+        <p class="text-stone-300 text-sm mb-4">Syabas pendekar, anda telah menamatkan ujian tatabahasa ini!</p>
+        <div class="bg-rose-950/60 p-5 rounded-2xl border-2 border-amber-500/40 mb-6 w-72 shadow-xl">
+          <div class="text-amber-200/80 text-xs uppercase tracking-widest font-bold">Jumlah Mata Hulubalang</div>
+          <div id="final-score" class="font-jebat text-5xl text-amber-400 my-2 drop-shadow-md">0</div>
+          <div id="grade-text" class="text-amber-300 text-sm font-bold bg-amber-500/20 py-1 px-3 rounded-full border border-amber-500/30 inline-block mt-1">Laksamana Jebat Ulung!</div>
+        </div>
+        <button id="btn-restart" class="font-jebat bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-stone-950 font-bold px-8 py-3 rounded-xl text-base shadow-lg hover:scale-105 transition duration-200 border border-amber-300 cursor-pointer">
+          Cuba Lagi 🔄
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Panduan Kawalan -->
+    <div class="mt-3 flex items-center justify-between text-xs text-amber-200/60 px-2">
+      <div class="flex items-center space-x-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping inline-block"></span>
+        <span>Aura Jari Telunjuk = Isyarat AR</span>
+      </div>
+      <span>Atau klik/sentuh jawapan</span>
+    </div>
+  </div>
+
+  <script>
+    // --- SENARAI SOALAN PENJODOH BILANGAN TAHUN 6 ---
+    const questions = [
+      {
+        question: "1. Ibu membeli dua _____ rantai emas di kedai tukang emas.",
+        options: ["utas", "bilah"],
+        correct: 0,
+        tip: "Penjodoh bilangan 'utas' digunakan untuk benda yang panjang dan berurai."
+      },
+      {
+        question: "2. Pihak polis menjumpai beberapa _____ senapang di premis itu.",
+        options: ["pucuk", "laras"],
+        correct: 1,
+        tip: "Penjodoh bilangan 'laras' digunakan untuk senjata api."
+      },
+      {
+        question: "3. Kakak membaca se_____ majalah sambil menunggu bas tiba.",
+        options: ["naskhah", "keping"],
+        correct: 0,
+        tip: "Penjodoh bilangan 'naskhah' digunakan untuk bahan bacaan."
+      },
+      {
+        question: "4. Pahlawan itu menghunus se_____ pedang yang amat tajam.",
+        options: ["bilah", "laras"],
+        correct: 0,
+        tip: "Penjodoh bilangan 'bilah' digunakan untuk benda tajam dan tajam."
+      },
+      {
+        question: "5. Pemuda itu menghadiahkan se_____ cincin kepada tunangnya.",
+        options: ["utas", "bentuk"],
+        correct: 1,
+        tip: "Penjodoh bilangan 'bentuk' digunakan untuk benda yang melengkung/bergelang."
+      },
+      {
+        question: "6. Pak Cik Osman menanam beberapa _____ serai di kebunnya.",
+        options: ["rumpun", "kaki"],
+        correct: 0,
+        tip: "Penjodoh bilangan 'rumpun' digunakan untuk tumbuhan yang tumbuh berkelompok."
+      },
+      {
+        question: "7. Abang menerima se_____ surat daripada sahabatnya.",
+        options: ["pucuk", "naskhah"],
+        correct: 0,
+        tip: "Penjodoh bilangan 'pucuk' digunakan untuk surat dan senjata api ringkas."
+      },
+      {
+        question: "8. Adik membawa se_____ payung kerana cuaca mendung.",
+        options: ["batang", "kaki"],
+        correct: 1,
+        tip: "Penjodoh bilangan 'kaki' digunakan untuk payung dan cendawan."
+      },
+      {
+        question: "9. Sasterawan itu mendeklamasikan se_____ syair yang indah.",
+        options: ["untai", "keping"],
+        correct: 0,
+        tip: "Penjodoh bilangan 'untai' digunakan untuk puisi/rangkaian perkataan."
+      },
+      {
+        question: "10. Deretan tiga _____ rumah kedai itu terbakar semalam.",
+        options: ["pintu", "buah"],
+        correct: 0,
+        tip: "Penjodoh bilangan 'pintu' digunakan untuk rumah kedai/bilik berderet."
+      }
+    ];
+
+    // --- ELEMEN DOM & VARIABEL GAME ---
+    const videoElement = document.getElementById('input-video');
+    const canvasElement = document.getElementById('output-canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+
+    const scoreEl = document.getElementById('score');
+    const qNumEl = document.getElementById('q-num');
+    const qTotalEl = document.getElementById('q-total');
+    const startOverlay = document.getElementById('start-overlay');
+    const endOverlay = document.getElementById('end-overlay');
+    const btnStart = document.getElementById('btn-start');
+    const btnRestart = document.getElementById('btn-restart');
+    const finalScoreEl = document.getElementById('final-score');
+    const gradeTextEl = document.getElementById('grade-text');
+
+    let currentQuestionIndex = 0;
+    let score = 0;
+    let isPlaying = false;
+
+    // Dwell Time Logic (Menahan jari pada kotak jawapan)
+    let hoverBoxIndex = -1;
+    let hoverStartTime = 0;
+    const DWELL_DURATION = 1000; // 1 saat
+    let isCooldown = false;
+
+    // Web Audio Context Global Instance
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          audioCtx = new AudioCtx();
+        }
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    // Kedudukan Kotak Jawapan pada Canvas (640x480)
+    const boxes = [
+      { x: 30, y: 320, width: 270, height: 110, label: '', index: 0 },
+      { x: 340, y: 320, width: 270, height: 110, label: '', index: 1 }
+    ];
+
+    qTotalEl.textContent = questions.length;
+
+    // --- HELPER UNTUK LUKIS BUKATAN BUKAN STandard (Compatibility Fallback) ---
+    function drawRoundRect(ctx, x, y, width, height, radius) {
+      ctx.beginPath();
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(x, y, width, height, radius);
+      } else {
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + width - radius, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+        ctx.lineTo(x + width, y + height - radius);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+        ctx.lineTo(x + radius, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+      }
+    }
+
+    // --- KESAN BUNYI (WEB AUDIO API SYNTHESIZER) ---
+    function playAudioFeedback(isCorrect) {
+      try {
+        initAudio();
+        if (!audioCtx) return;
+
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        const now = audioCtx.currentTime;
+
+        if (isCorrect) {
+          osc.frequency.setValueAtTime(523.25, now); // C5
+          osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
+          osc.frequency.setValueAtTime(783.99, now + 0.2); // G5
+        } else {
+          osc.frequency.setValueAtTime(220.00, now); // A3
+          osc.frequency.setValueAtTime(196.00, now + 0.15); // G3
+        }
+
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      } catch (e) {
+        console.log("Audio Context Error: ", e);
+      }
+    }
+
+    // --- LOGIK KUIZ ---
+    function updateQuestionUI() {
+      const q = questions[currentQuestionIndex];
+      qNumEl.textContent = currentQuestionIndex + 1;
+      boxes[0].label = q.options[0];
+      boxes[1].label = q.options[1];
+    }
+
+    function checkAnswer(selectedIndex) {
+      if (isCooldown || !isPlaying) return;
+      isCooldown = true;
+
+      const q = questions[currentQuestionIndex];
+      const isCorrect = (selectedIndex === q.correct);
+
+      playAudioFeedback(isCorrect);
+
+      if (isCorrect) {
+        score += 10;
+        scoreEl.textContent = score;
+      }
+
+      // Beri tunda sikit sebelum tukar soalan
+      setTimeout(() => {
+        currentQuestionIndex++;
+        if (currentQuestionIndex < questions.length) {
+          updateQuestionUI();
+          isCooldown = false;
+        } else {
+          finishGame();
+        }
+      }, 600);
+    }
+
+    function finishGame() {
+      isPlaying = false;
+      finalScoreEl.textContent = score;
+
+      if (score >= 80) {
+        gradeTextEl.textContent = "Laksamana Jebat Ulung! 🗡️";
+      } else if (score >= 50) {
+        gradeTextEl.textContent = "Hulubalang Berani! 🛡️";
+      } else {
+        gradeTextEl.textContent = "Pendekar Muda (Perlu Berguru) 📜";
+      }
+
+      endOverlay.classList.remove('hidden');
+    }
+
+    function resetGame() {
+      currentQuestionIndex = 0;
+      score = 0;
+      scoreEl.textContent = score;
+      endOverlay.classList.add('hidden');
+      updateQuestionUI();
+      isPlaying = true;
+      hoverBoxIndex = -1;
+      isCooldown = false;
+    }
+
+    // --- RENDERING CANVAS & LUKISAN AR TEMA JEBAT ---
+    function onResults(results) {
+      // 1. Bersihkan Canvas
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+      // 2. Lukis Video Cermin (Mirroring Video Frame)
+      if (results.image) {
+        canvasCtx.save();
+        canvasCtx.translate(canvasElement.width, 0);
+        canvasCtx.scale(-1, 1);
+        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+        canvasCtx.restore();
+      }
+
+      if (!isPlaying) {
+        canvasCtx.restore();
+        return;
+      }
+
+      const q = questions[currentQuestionIndex];
+
+      // 3. Lukis Kad Soalan AR (Tema Ukiran Kayu Jati / Emas)
+      canvasCtx.fillStyle = 'rgba(43, 10, 16, 0.92)'; // Merah Hati Gelap
+      drawRoundRect(canvasCtx, 20, 20, 600, 95, 14);
+      canvasCtx.fill();
+      
+      // Sempadan Bingkai Emas
+      canvasCtx.strokeStyle = '#d97706';
+      canvasCtx.lineWidth = 4;
+      canvasCtx.stroke();
+      
+      // Garis Dalam Bingkai
+      canvasCtx.strokeStyle = 'rgba(251, 191, 36, 0.4)';
+      canvasCtx.lineWidth = 1.5;
+      drawRoundRect(canvasCtx, 24, 24, 592, 87, 10);
+      canvasCtx.stroke();
+
+      // Teks Soalan
+      canvasCtx.fillStyle = '#fef3c7';
+      canvasCtx.font = 'bold 18px "Plus Jakarta Sans", sans-serif';
+      canvasCtx.textAlign = 'center';
+      canvasCtx.fillText(q.question, 320, 58, 560);
+
+      // 4. Pengesanan Jari & Dwell Progress
+      let activeFingerX = null;
+      let activeFingerY = null;
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const landmarks = results.multiHandLandmarks[0];
+        const indexTip = landmarks[8]; // Landmark #8 = Ujung Jari Telunjuk
+
+        activeFingerX = (1 - indexTip.x) * canvasElement.width;
+        activeFingerY = indexTip.y * canvasElement.height;
+      }
+
+      // Semak Pertindihan Jari dengan Kotak Jawapan
+      let currentHover = -1;
+      if (activeFingerX !== null && activeFingerY !== null && !isCooldown) {
+        boxes.forEach((box, i) => {
+          if (
+            activeFingerX >= box.x &&
+            activeFingerX <= box.x + box.width &&
+            activeFingerY >= box.y &&
+            activeFingerY <= box.y + box.height
+          ) {
+            currentHover = i;
+          }
+        });
+      }
+
+      // Kelola Masa Pemasa (Dwell Duration)
+      const now = performance.now();
+      if (currentHover !== -1) {
+        if (hoverBoxIndex !== currentHover) {
+          hoverBoxIndex = currentHover;
+          hoverStartTime = now;
+        }
+      } else {
+        hoverBoxIndex = -1;
+      }
+
+      let dwellProgress = 0;
+      if (hoverBoxIndex !== -1) {
+        dwellProgress = Math.min(1.0, (now - hoverStartTime) / DWELL_DURATION);
+        if (dwellProgress >= 1.0) {
+          checkAnswer(hoverBoxIndex);
+          hoverBoxIndex = -1;
+          dwellProgress = 0;
+        }
+      }
+
+      // 5. Lukis Kotak Jawapan (AR Answer Boxes Tema Istana)
+      boxes.forEach((box, i) => {
+        const isHovered = (hoverBoxIndex === i);
+
+        // Latar Kotak Jawapan
+        canvasCtx.fillStyle = isHovered ? 'rgba(120, 53, 15, 0.95)' : 'rgba(28, 25, 23, 0.88)';
+        drawRoundRect(canvasCtx, box.x, box.y, box.width, box.height, 14);
+        canvasCtx.fill();
+
+        // Sempadan Kotak (Emas / Coklat Kayu)
+        canvasCtx.strokeStyle = isHovered ? '#fbbf24' : '#78350f';
+        canvasCtx.lineWidth = isHovered ? 4 : 2.5;
+        canvasCtx.stroke();
+
+        // Bar Masa Kemajuan (Progress Fill Emas Sakti)
+        if (isHovered && dwellProgress > 0) {
+          canvasCtx.fillStyle = 'rgba(217, 119, 6, 0.55)';
+          drawRoundRect(canvasCtx, box.x, box.y, box.width * dwellProgress, box.height, 14);
+          canvasCtx.fill();
+        }
+
+        // Teks Jawapan
+        canvasCtx.fillStyle = isHovered ? '#ffffff' : '#fef3c7';
+        canvasCtx.font = 'bold 26px "Fredoka One", cursive';
+        canvasCtx.textAlign = 'center';
+        canvasCtx.fillText(box.label, box.x + box.width / 2, box.y + box.height / 2 + 8);
+      });
+
+      // 6. Lukis Kursor Jari Telunjuk (Aura Bintang/Keris Pendekar)
+      if (activeFingerX !== null && activeFingerY !== null) {
+        // Aura Luar Pulsa Emas
+        canvasCtx.beginPath();
+        canvasCtx.arc(activeFingerX, activeFingerY, 20, 0, 2 * Math.PI);
+        canvasCtx.fillStyle = hoverBoxIndex !== -1 ? 'rgba(251, 191, 36, 0.6)' : 'rgba(225, 29, 72, 0.5)';
+        canvasCtx.fill();
+
+        // Cincin Dalam Emas
+        canvasCtx.beginPath();
+        canvasCtx.arc(activeFingerX, activeFingerY, 10, 0, 2 * Math.PI);
+        canvasCtx.fillStyle = hoverBoxIndex !== -1 ? '#f59e0b' : '#fb7185';
+        canvasCtx.fill();
+        canvasCtx.strokeStyle = '#ffffff';
+        canvasCtx.lineWidth = 2.5;
+        canvasCtx.stroke();
+
+        // Suar Cahaya Tengah
+        canvasCtx.beginPath();
+        canvasCtx.arc(activeFingerX, activeFingerY, 4, 0, 2 * Math.PI);
+        canvasCtx.fillStyle = '#ffffff';
+        canvasCtx.fill();
+      }
+
+      canvasCtx.restore();
+    }
+
+    // --- TETAPAN MEDIAPIPE HANDS & KAMERA ---
+    let hands = null;
+    let camera = null;
+
+    try {
+      hands = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      });
+
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7
+      });
+
+      hands.onResults(onResults);
+
+      camera = new Camera(videoElement, {
+        onFrame: async () => {
+          if (videoElement && hands) {
+            await hands.send({ image: videoElement });
+          }
+        },
+        width: 640,
+        height: 480
+      });
+    } catch (err) {
+      console.warn("MediaPipe Hands initialization error:", err);
+    }
+
+    // Rintis paparan awal soalan
+    updateQuestionUI();
+
+    // Loop animasi asas sekiranya tiada pengesan tangan (supaya canvas tidak kosong)
+    function renderFallbackLoop() {
+      if (!isPlaying) return;
+      // Jika kamera tiada atau belum menghantar frame, renders canvas berterusan untuk mod tetikus
+      onResults({ image: videoElement });
+      requestAnimationFrame(renderFallbackLoop);
+    }
+
+    // --- EVENT LISTENERS ---
+    btnStart.addEventListener('click', () => {
+      initAudio();
+      startOverlay.classList.add('hidden');
+      resetGame();
+
+      if (camera) {
+        camera.start().catch(err => {
+          console.warn("Akses kamera disekat/gagal:", err);
+          document.getElementById('camera-status').classList.remove('hidden');
+          // Mulakan fallback loop animasi untuk mod tetikus
+          renderFallbackLoop();
+        });
+      } else {
+        renderFallbackLoop();
+      }
+    });
+
+    btnRestart.addEventListener('click', () => {
+      initAudio();
+      resetGame();
+    });
+
+    // Sokongan Tetikus & Sentuhan Skrin sebagai Fallback
+    function handleCanvasInteraction(e) {
+      if (!isPlaying || isCooldown) return;
+
+      const rect = canvasElement.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+      const clickX = (clientX - rect.left) * (canvasElement.width / rect.width);
+      const clickY = (clientY - rect.top) * (canvasElement.height / rect.height);
+
+      boxes.forEach(box => {
+        if (
+          clickX >= box.x &&
+          clickX <= box.x + box.width &&
+          clickY >= box.y &&
+          clickY <= box.y + box.height
+        ) {
+          checkAnswer(box.index);
+        }
+      });
+    }
+
+    canvasElement.addEventListener('click', handleCanvasInteraction);
+    canvasElement.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      handleCanvasInteraction(e);
+    });
+  </script>
+</body>
+</html>
